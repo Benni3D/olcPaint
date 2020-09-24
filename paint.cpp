@@ -1,30 +1,168 @@
 #define OLC_PGE_APPLICATION
+#include <utility>
 #include <cstdio>
+#include <array>
 #include "olcPixelGameEngine.h"
 
-struct ColorBox {
-	static constexpr int size = 20;
-	static constexpr int offx = 20;
-	static constexpr int offy = 50;
+template<std::size_t N>
+class ColorMenu {
+private:
+	std::array<olc::Pixel, N> colors{};
+	std::shared_ptr<olc::Sprite> sprite{};
+	std::shared_ptr<olc::Decal> decal{};
+public:
+	olc::Pixel fgColor{ olc::WHITE }, bgColor{ olc::BLACK };
 	olc::vi2d pos;
-	olc::Pixel color;
+	int colorsPerRow = 2;
+	int boxSize = 16;
+	int padding = 5;
+	int padding2 = 15;
+	int upperPadding = 10;
+	olc::Pixel menuBackground = olc::GREY;
+	olc::Pixel border = olc::WHITE;
 
-	constexpr bool contains(olc::vi2d other) const noexcept {
-		return other.x >= pos.x && other.y >= pos.y && other.x < (pos.x + size) && other.y < (pos.y + size);
+	constexpr ColorMenu(olc::vi2d pos = {}) noexcept : pos(pos) {}
+	ColorMenu(const std::array<olc::Pixel, N>& a, olc::vi2d pos = {}) noexcept
+		: colors(a), pos(pos) {
+		update();
 	}
+
+	void setColor(std::size_t i, olc::Pixel c) noexcept {
+		if (i < colors.size()) colors[i] = c;
+	}
+	[[nodiscard]]
+	auto getColor(std::size_t i) const noexcept {
+		return i < colors.size() ? colors[i] : olc::BLANK;
+	}
+
+	void update() noexcept {
+		sprite = draw();
+		decal = std::make_shared<olc::Decal>(sprite.get());
+	}
+
+	[[nodiscard]]
+	auto getDecal() const noexcept { return decal; }
+
+	[[nodiscard]]
+	const olc::Pixel& operator[](std::size_t i) const noexcept {
+		return colors[i];
+	}
+	[[nodiscard]]
+	olc::Pixel& operator[](std::size_t i) noexcept {
+		return colors[i];
+	}
+
+	[[nodiscard]]
+	constexpr bool contains(olc::vi2d p) const noexcept {
+		return (p.x >= pos.x + padding)
+			&& p.y >= (pos.y + padding)
+			&& p.x < (pos.x + getWidth() - padding)
+			&& p.y < (pos.y + getHeight() - padding);
+	}
+	[[nodiscard]]
+	constexpr std::size_t getColorIndexAtPos(olc::vi2d p) const noexcept {
+		const auto isSelected = [p, this](std::size_t ci) {
+			const auto p2 = getBoxPos(ci) + pos;
+			return p.x >= p2.x && p.y >= p2.y && p.x < (p2.x + boxSize) && p.y < (p2.y + boxSize);
+		};
+
+		for (std::size_t i = 0; i < colors.size(); ++i) {
+			if (isSelected(i)) return i;
+		}
+
+		return -1;
+	}
+	[[nodiscard]]
+	constexpr int getWidth() const noexcept {
+		return ((colorsPerRow + 1) * padding) + (colorsPerRow * boxSize);
+	}
+	[[nodiscard]]
+	constexpr int getHeight() const noexcept {
+		const int rows = (colors.size() + colorsPerRow - 1) / colorsPerRow;
+		return (rows * padding) + (rows * boxSize) + upperPadding;
+	}
+	[[nodiscard]]
+	constexpr int getFullHeight() const noexcept {
+		return getHeight() + padding2 + 2 * padding + boxSize;
+	}
+
+private:
+	olc::vi2d getBoxPos(std::size_t ci) const noexcept {
+		const int posx = (ci % colorsPerRow) * boxSize + (ci % colorsPerRow + 1) * padding;
+		const int posy = (ci / colorsPerRow) * boxSize + (ci / colorsPerRow) * padding + upperPadding;
+		return { posx, posy };
+	}
+	[[nodiscard]]
+	auto draw() const noexcept {
+		const olc::Pixel background = menuBackground;
+		const int rows = (colors.size() + colorsPerRow - 1) / colorsPerRow;
+		const int width = getWidth();
+		const int height = getHeight();
+		const int width_sel = (3 * padding) + (2 * boxSize);
+		const int height_sel = (2 * padding) + boxSize;
+		auto sprite = std::make_shared<olc::Sprite>(width, height + height_sel + padding2);
+
+		const auto fillRect = [sprite](int x, int y, int w, int h, olc::Pixel color) {
+			for (int y2 = 0; y2 < h; ++y2) {
+				for (int x2 = 0; x2 < w; ++x2) {
+					sprite->SetPixel(x2 + x, y2 + y, color);
+				}
+			}
+		};
+ 		const auto drawBox = [&sprite, this](int x, int y, olc::Pixel color){
+			for (int i = 0; i < boxSize; ++i) {
+				sprite->SetPixel(i + x, y, border);
+				sprite->SetPixel(i + x, y + boxSize, border);
+				sprite->SetPixel(x, i + y, border);
+				sprite->SetPixel(x + boxSize, i + y, border);
+			}
+			for (int y2 = 1; y2 < (boxSize - 1); ++y2) {
+				for (int x2 = 1; x2 < (boxSize - 1); ++x2) {
+					sprite->SetPixel(x2 + x, y2 + y, color);
+				}
+			}
+		};
+
+		// draw background
+		fillRect(0, 0, width, height, background);
+		fillRect(0, height, width, padding2, olc::BLANK);
+		fillRect(0, height + padding2, width_sel, height_sel, background);
+		fillRect(width_sel, height + padding2, width - width_sel, height_sel, olc::BLANK);
+
+		// draw boxes for main color selector
+		for (int y = 0; y < rows; ++y) {
+			for (int x = 0; x < colorsPerRow; ++x) {
+				if ((y * colorsPerRow + x) >= colors.size()) goto L1;
+				const int posx = (x + 1) * padding + (x * boxSize);
+				const int posy = y * padding + (y * boxSize) + upperPadding;
+				drawBox(posx, posy, colors[y * colorsPerRow + x]);
+			}
+		}
+		L1:;
+
+		// draw boxes for selected colors view
+		drawBox(padding, height + padding2 + padding, fgColor);
+		drawBox(2 * padding + boxSize, height + padding2 + padding, bgColor);
+
+		return sprite;
+	}
+
 };
 
 class Paint : public olc::PixelGameEngine {
 private:
+	static constexpr int max_scale = 50;
 	std::string filename{};
 	std::unique_ptr<olc::Sprite> surface{};
 	int scale{1};
 	float posx, posy;
-	std::array<ColorBox, 16> colors{};
-	olc::Pixel selectedForeground{};
-	olc::Pixel selectedBackground{};
 	int invert_move = 1;
 	olc::vi2d last_mouse;
+	float text_counter{};
+	std::string text{};
+	olc::Pixel text_color{};
+
+	ColorMenu<24> colorMenu{};
 public:
 	Paint() : filename() {}
 	Paint(const char* filename) : filename(filename) {}
@@ -33,33 +171,40 @@ public:
 		if (filename.empty()) surface = std::make_unique<olc::Sprite>(640, 480);
 		else surface = std::make_unique<olc::Sprite>(filename);
 
+		sAppName = "olcPaint";
+
 		posx = (ScreenWidth() - surface->width) / 2;
 		posy = (ScreenHeight() - surface->height) / 2;
 
-		for (std::size_t i = 0; i < colors.size(); ++i) {
-			const int x = (i & 1) == 0 ? ColorBox::offx : (ColorBox::offx + ColorBox::size + 5);
-			const int y = (i >> 1) * (ColorBox::size + 5) + ColorBox::offy;
-			colors[i].pos = { x + 5, y + 5 };
-		}
-		colors[ 0].color = olc::RED;
-		colors[ 1].color = olc::DARK_RED;
-		colors[ 2].color = olc::GREEN;
-		colors[ 3].color = olc::DARK_GREEN;
-		colors[ 4].color = olc::BLUE;
-		colors[ 5].color = olc::DARK_BLUE;
-		colors[ 6].color = olc::GREY;
-		colors[ 7].color = olc::DARK_GREY;
-		colors[ 8].color = olc::CYAN;
-		colors[ 9].color = olc::DARK_CYAN;
-		colors[10].color = olc::YELLOW;
-		colors[11].color = olc::DARK_YELLOW;
-		colors[12].color = olc::MAGENTA;
-		colors[13].color = olc::DARK_MAGENTA;
-		colors[14].color = olc::WHITE;
-		colors[15].color = olc::BLACK;
+		colorMenu[ 0] = olc::RED;
+		colorMenu[ 1] = olc::DARK_RED;
+		colorMenu[ 2] = olc::VERY_DARK_RED;
+		colorMenu[ 3] = olc::GREEN;
+		colorMenu[ 4] = olc::DARK_GREEN;
+		colorMenu[ 5] = olc::VERY_DARK_GREEN;
+		colorMenu[ 6] = olc::BLUE;
+		colorMenu[ 7] = olc::DARK_BLUE;
+		colorMenu[ 8] = olc::VERY_DARK_BLUE;
+		colorMenu[ 9] = olc::GREY;
+		colorMenu[10] = olc::DARK_GREY;
+		colorMenu[11] = olc::VERY_DARK_GREY;
+		colorMenu[12] = olc::CYAN;
+		colorMenu[13] = olc::DARK_CYAN;
+		colorMenu[14] = olc::VERY_DARK_CYAN;
+		colorMenu[15] = olc::YELLOW;
+		colorMenu[16] = olc::DARK_YELLOW;
+		colorMenu[17] = olc::VERY_DARK_YELLOW;
+		colorMenu[18] = olc::MAGENTA;
+		colorMenu[19] = olc::DARK_MAGENTA;
+		colorMenu[20] = olc::VERY_DARK_MAGENTA;
+		colorMenu[21] = olc::WHITE;
+		colorMenu[22] = olc::BLACK;
+		colorMenu[23] = olc::BLANK;
 
-		selectedForeground = olc::WHITE;
-		selectedBackground = olc::BLACK;
+		colorMenu.pos = { 100, 100 };
+		colorMenu.boxSize = 20;
+		colorMenu.colorsPerRow = 3;
+		colorMenu.update();
 
 		return true;
 	}
@@ -68,6 +213,12 @@ public:
 		float speed = 100.0f * invert_move;
 		const auto imagePos = [this]() {
 			return olc::vi2d{int(posx - ((scale - 1) * surface->width / 2)), int(posy - ((scale - 1) * surface->height / 2))};
+		};
+		const auto in_image = [this, imagePos](int x, int y) {
+			const auto pos = imagePos();
+			return x >= int(pos.x) && y >= int(pos.y)
+			&& x < (int(pos.x) + surface->width * scale)
+			&& y < (int(pos.y) + surface->height * scale);
 		};
 		if (GetKey(olc::Key::SHIFT).bHeld && !GetMouseWheel()) speed *= 10.0f;
 		else if (GetKey(olc::Key::ALT).bHeld) speed /= 5.0f;
@@ -81,7 +232,16 @@ public:
 
 		if (GetKey(olc::Key::CTRL).bHeld && GetKey(olc::Key::S).bPressed) {
 			// SAVE ME
-			std::puts("Saving is not implemented!");
+			const bool r = saveImage(*surface);
+			if (r) {
+				text = "Saved.";
+				text_color = olc::DARK_GREY;
+			}
+			else {
+				text = "Failed to save!";
+				text_color = olc::RED;
+			}
+			text_counter = 3;
 		}
 
 		if (const int m = GetMouseWheel(); m) {
@@ -94,34 +254,41 @@ public:
 		}
 
 		if (scale <= 0) scale = 1;
-		else if (scale > 10) scale = 10;
-
+		else if (scale > max_scale) scale = max_scale;
 		if (GetMouse(0).bPressed || GetMouse(1).bPressed) {
 			const int x = GetMouseX();
 			const int y = GetMouseY();
-			if (x >= ColorBox::offx + 5 && y >= ColorBox::offy + 5
-				&& x < (ColorBox::offx + 2 * ColorBox::size + 10)
-				&& y < (ColorBox::offy + (colors.size() / 2 + 1) * ColorBox::size + 10)) {
-				olc::Pixel* const color = GetMouse(0).bPressed ? &selectedForeground : &selectedBackground;
-				for (std::size_t i = 0; i < colors.size(); ++i) {
-					if (colors[i].contains({ x, y })) {
-						*color = colors[i].color;
-						goto draw;
-					}
-				}
+			const std::size_t ci = colorMenu.getColorIndexAtPos({ x, y });
+			if (ci != -1) {
+				olc::Pixel color = colorMenu.getColor(ci);
+				if (GetMouse(0).bPressed) colorMenu.fgColor = color;
+				else colorMenu.bgColor = color;
+				colorMenu.update();
+			}
+		}
+		if (GetMouse(2).bPressed) {
+			const int x = GetMouseX();
+			const int y = GetMouseY();
+			const auto pos = imagePos();
+			if (in_image(x, y)) {
+				const int sx = (x - int(pos.x)) / scale;
+				const int sy = (y - int(pos.y)) / scale;
+				colorMenu.fgColor = surface->GetPixel(sx, sy);
+				colorMenu.update();
 			}
 		}
 		if (GetMouse(0).bHeld || GetMouse(1).bHeld) {
 			const int x = GetMouseX();
 			const int y = GetMouseY();
+			if (last_mouse.x >= colorMenu.pos.x && last_mouse.y >= colorMenu.pos.y
+				&& last_mouse.x < (colorMenu.pos.x + colorMenu.getWidth())
+				&& last_mouse.y < (colorMenu.pos.y + colorMenu.upperPadding)) {
+				colorMenu.pos.x = std::clamp(x - (last_mouse.x - colorMenu.pos.x), 0, (ScreenWidth() - colorMenu.getWidth()));
+				colorMenu.pos.y = std::clamp(y - (last_mouse.y - colorMenu.pos.y), 0, (ScreenHeight() - colorMenu.getFullHeight()));
+			}
+			else if (in_image(x, y) && in_image(last_mouse.x, last_mouse.y)) {
 			const auto pos = imagePos();
-			const auto in_image = [this, pos](int x, int y) {
-				return x >= int(pos.x) && y >= int(pos.y)
-				&& x < (int(pos.x) + surface->width * scale)
-				&& y < (int(pos.y) + surface->height * scale);
-			};
-			if (in_image(x, y) && in_image(last_mouse.x, last_mouse.y)) {
-				const olc::Pixel color = GetMouse(0).bHeld ? selectedForeground : selectedBackground;
+				const olc::Pixel color = GetMouse(0).bHeld ? colorMenu.fgColor : colorMenu.bgColor;
 				const int sx = (x - int(pos.x)) / scale;
 				const int sy = (y - int(pos.y)) / scale;
 				const int lx = (last_mouse.x - int(pos.x)) / scale;
@@ -139,19 +306,74 @@ public:
 		Clear(olc::Pixel(200, 255, 255));
 
 		// Draw Image
-		DrawSprite(imagePos(), surface.get(), uint32_t(scale));
+		DrawRect(imagePos().x - 1, imagePos().y - 1, (surface->width * scale) + 2 , (surface->height * scale) + 2, olc::VERY_DARK_GREY);
 
-		// Draw UI
-		FillRect(ColorBox::offx, ColorBox::offy, ColorBox::size * 2 + 15, (ColorBox::size + 5) * colors.size() / 2 + 5, olc::GREY);
-		for (std::size_t i = 0; i < colors.size(); ++i) {
-			FillRect(colors[i].pos, { ColorBox::size, ColorBox::size }, colors[i].color);
-			DrawRect(colors[i].pos, { ColorBox::size, ColorBox::size });
+		SetPixelMode(olc::Pixel::MASK);
+		DrawSprite(imagePos(), surface.get(), uint32_t(scale));
+		SetPixelMode(olc::Pixel::NORMAL);
+
+		SetPixelMode(olc::Pixel::MASK);
+		DrawDecal(colorMenu.pos, colorMenu.getDecal().get());
+		SetPixelMode(olc::Pixel::NORMAL);
+
+		if (text_counter != 0.0f) {
+			if (text_counter < 0.0f) text_counter = 0.0f;
+			else {
+				text_counter -= delta;
+				DrawString(ScreenWidth() / 2 - GetTextSize(text).x * 2, 20, text, text_color, 5);
+			}
 		}
-		FillRect(ColorBox::offx, ColorBox::offy + (colors.size() / 2 + 3) * ColorBox::size - 5, ColorBox::size * 2 + 15, ColorBox::size + 10, olc::GREY);
-		FillRect(ColorBox::offx + 5, ColorBox::offy + (colors.size() / 2 + 3) * ColorBox::size, ColorBox::size, ColorBox::size, selectedForeground);
-		DrawRect(ColorBox::offx + 5, ColorBox::offy + (colors.size() / 2 + 3) * ColorBox::size, ColorBox::size, ColorBox::size, olc::WHITE);
-		FillRect(ColorBox::offx + ColorBox::size + 10, ColorBox::offy + (colors.size() / 2 + 3) * ColorBox::size, ColorBox::size, ColorBox::size, selectedBackground);
-		DrawRect(ColorBox::offx + ColorBox::size + 10, ColorBox::offy + (colors.size() / 2 + 3) * ColorBox::size, ColorBox::size, ColorBox::size, olc::WHITE);
+
+		return true;
+	}
+
+	bool saveImage(const olc::Sprite& spr) {
+		FILE* file = std::fopen(filename.c_str(), "wb");
+		png_structp png = nullptr;
+		png_infop info = nullptr;
+		png_bytep* rows = nullptr;
+
+		if (!surface->GetData() || !file) return false;
+
+		png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+		if (!png) return false;
+
+		info = png_create_info_struct(png);
+		if (!info) return false;
+
+		png_set_IHDR(
+			png,
+			info,
+			surface->width,
+			surface->height,
+			8,
+			PNG_COLOR_TYPE_RGB_ALPHA,
+			PNG_INTERLACE_NONE,
+			PNG_COMPRESSION_TYPE_BASE,
+			PNG_FILTER_TYPE_BASE
+		);
+		rows = new png_bytep[surface->height];
+		for (int y = 0; y < surface->height; ++y) {
+			rows[y] = new png_byte[surface->width * sizeof(olc::Pixel)];
+			for (int x = 0; x < surface->width; ++x) {
+				const auto px = spr.GetPixel(x, y);
+				rows[y][x * 4 + 0] = px.r;
+				rows[y][x * 4 + 1] = px.g;
+				rows[y][x * 4 + 2] = px.b;
+				rows[y][x * 4 + 3] = px.a;
+			}
+		}
+		png_init_io(png, file);
+		png_set_rows(png, info, rows);
+		png_write_png(png, info, PNG_TRANSFORM_IDENTITY, nullptr);
+
+		for (int y = 0; y < surface->height; ++y)
+			delete[] rows[y];
+		delete[] rows;
+
+		png_destroy_write_struct(&png, &info);
+
+		fclose(file);
 
 		return true;
 	}
