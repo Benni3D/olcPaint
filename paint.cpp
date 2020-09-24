@@ -306,7 +306,7 @@ public:
 		Clear(olc::Pixel(200, 255, 255));
 
 		// Draw Image
-		DrawRect(imagePos().x - 1, imagePos().y - 1, (surface->width * scale) + 2 , (surface->height * scale) + 2, olc::VERY_DARK_GREY);
+		DrawRect(imagePos().x - 1, imagePos().y - 1, (surface->width * scale) + 1 , (surface->height * scale) + 1, olc::VERY_DARK_GREY);
 
 		SetPixelMode(olc::Pixel::MASK);
 		DrawSprite(imagePos(), surface.get(), uint32_t(scale));
