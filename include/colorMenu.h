@@ -58,6 +58,7 @@ namespace paint {
 
 			return -1;
 		}
+
 	protected:
 		void onUpdate(olc::PixelGameEngine& pge, float delta) override {
 

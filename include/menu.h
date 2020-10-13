@@ -16,7 +16,7 @@ namespace paint {
 		virtual olc::vi2d getSize() const noexcept = 0;
 		virtual bool contains(int x, int y) noexcept {
 			const auto size = getSize();
-			return x >= 0 && y >= 0 && x < size.x && y < size.y;
+			return x >= pos.x && y >= pos.y && x < (pos.x + size.x) && y < (pos.y + size.y);
 		}
 		void update(olc::PixelGameEngine& pge, float delta) {
 			onUpdate(pge, delta);

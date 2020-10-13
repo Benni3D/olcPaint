@@ -6,8 +6,6 @@
 #include "colorMenu.h"
 
 namespace paint {
-
-
 	class Paint : public olc::PixelGameEngine {
 	private:
 		static constexpr int max_scale = 50;
@@ -120,17 +118,7 @@ namespace paint {
 
 			if (scale <= 0) scale = 1;
 			else if (scale > max_scale) scale = max_scale;
-			if (GetMouse(0).bPressed || GetMouse(1).bPressed) {
-				const int x = GetMouseX();
-				const int y = GetMouseY();
-				const std::size_t ci = colorMenu.getColorIndexAtPos({ x, y });
-				if (ci != -1) {
-					olc::Pixel color = colorMenu.getColor(ci);
-					if (GetMouse(0).bPressed) colorMenu.fgColor = color;
-					else colorMenu.bgColor = color;
-					colorMenu.update(*this, 0);
-				}
-			}
+			
 			if (GetMouse(2).bPressed) {
 				const int x = GetMouseX();
 				const int y = GetMouseY();
@@ -145,14 +133,26 @@ namespace paint {
 			if (GetMouse(0).bHeld || GetMouse(1).bHeld) {
 				const int x = GetMouseX();
 				const int y = GetMouseY();
+				//if (colorMenu.contains(last_mouse.x, last_mouse.y)) {
 				if (last_mouse.x >= colorMenu.pos.x && last_mouse.y >= colorMenu.pos.y
 					&& last_mouse.x < (colorMenu.pos.x + colorMenu.getWidth())
 					&& last_mouse.y < (colorMenu.pos.y + colorMenu.upperPadding)) {
 					colorMenu.pos.x = std::clamp(x - (last_mouse.x - colorMenu.pos.x), 0, (ScreenWidth() - colorMenu.getWidth()));
 					colorMenu.pos.y = std::clamp(y - (last_mouse.y - colorMenu.pos.y), 0, (ScreenHeight() - colorMenu.getHeight()));
+					goto draw;
+				}
+				else if (colorMenu.contains(last_mouse.x, last_mouse.y)) {
+					const std::size_t ci = colorMenu.getColorIndexAtPos({ x, y });
+					if (ci != -1) {
+						olc::Pixel color = colorMenu.getColor(ci);
+						if (GetMouse(0).bPressed) colorMenu.fgColor = color;
+						else colorMenu.bgColor = color;
+						colorMenu.update(*this, 0);
+						goto draw;
+					}
 				}
 				else if (in_image(x, y) && in_image(last_mouse.x, last_mouse.y)) {
-				const auto pos = imagePos();
+					const auto pos = imagePos();
 					const olc::Pixel color = GetMouse(0).bHeld ? colorMenu.fgColor : colorMenu.bgColor;
 					const int sx = (x - int(pos.x)) / scale;
 					const int sy = (y - int(pos.y)) / scale;
@@ -166,19 +166,20 @@ namespace paint {
 				}
 			}
 
-			last_mouse = GetMousePos();
 
 			draw:
+			last_mouse = GetMousePos();
 			Clear(olc::Pixel(200, 255, 255));
 
 			// Draw Image
 			DrawRect(imagePos().x - 1, imagePos().y - 1, (surface->width * scale) + 1 , (surface->height * scale) + 1, olc::VERY_DARK_GREY);
 
-			SetPixelMode(olc::Pixel::MASK);
 			//DrawSprite(imagePos(), surface.get(), uint32_t(scale));
+			SetPixelMode(olc::Pixel::MASK);
 			DrawDecal(imagePos(), decal.get(), { scale, scale });
 			SetPixelMode(olc::Pixel::NORMAL);
 
+			// Draw Color Menu
 			SetPixelMode(olc::Pixel::MASK);
 			DrawDecal(colorMenu.pos, colorMenu.getDecal().get());
 			SetPixelMode(olc::Pixel::NORMAL);
