@@ -145,8 +145,8 @@ namespace paint {
 					const std::size_t ci = colorMenu.getColorIndexAtPos({ x, y });
 					if (ci != -1) {
 						olc::Pixel color = colorMenu.getColor(ci);
-						if (GetMouse(0).bPressed) colorMenu.fgColor = color;
-						else colorMenu.bgColor = color;
+						if (GetMouse(0).bHeld) colorMenu.fgColor = color;
+						else if (GetMouse(1).bHeld) colorMenu.bgColor = color;
 						colorMenu.update(*this, 0);
 						goto draw;
 					}
