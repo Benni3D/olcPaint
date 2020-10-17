@@ -12,7 +12,7 @@ namespace paint {
 		std::string filename{};
 		std::unique_ptr<olc::Sprite> surface{};
 		std::unique_ptr<olc::Decal> decal{};
-		int scale{1};
+		float scale{1};
 		float posx, posy;
 		int invert_move = 1;
 		olc::vi2d last_mouse;
@@ -66,6 +66,8 @@ namespace paint {
 
 			updateDecal();
 
+			scale = 0.5;
+
 			return true;
 		}
 
@@ -73,6 +75,7 @@ namespace paint {
 			decal = std::make_unique<olc::Decal>(surface.get());
 		}
 		bool OnUserUpdate(float delta) noexcept override {
+			constexpr float scale_speed = float(1.0 + 1.0/3.0);
 			float speed = 100.0f * invert_move;
 			const auto imagePos = [this]() {
 				return olc::vi2d{int(posx - ((scale - 1) * surface->width / 2)), int(posy - ((scale - 1) * surface->height / 2))};
@@ -85,12 +88,12 @@ namespace paint {
 			};
 			if (GetKey(olc::Key::SHIFT).bHeld && !GetMouseWheel()) speed *= 10.0f;
 			else if (GetKey(olc::Key::ALT).bHeld) speed /= 5.0f;
-			if (GetKey(olc::Key::UP).bHeld) posy -= delta * speed;
-			if (GetKey(olc::Key::DOWN).bHeld) posy += delta * speed;
-			if (GetKey(olc::Key::LEFT).bHeld) posx -= delta * speed;
-			if (GetKey(olc::Key::RIGHT).bHeld) posx += delta * speed;
-			if (GetKey(olc::Key::PLUS).bPressed) ++scale;
-			else if (GetKey(olc::Key::MINUS).bPressed) --scale;
+			if (GetKey(olc::Key::UP).bHeld) posy += delta * speed;
+			if (GetKey(olc::Key::DOWN).bHeld) posy -= delta * speed;
+			if (GetKey(olc::Key::LEFT).bHeld) posx += delta * speed;
+			if (GetKey(olc::Key::RIGHT).bHeld) posx -= delta * speed;
+			if (GetKey(olc::Key::PLUS).bPressed) scale *= scale_speed;
+			else if (GetKey(olc::Key::MINUS).bPressed) scale /= scale_speed;
 			if (GetKey(olc::Key::F2).bPressed) invert_move = -invert_move;
 
 			if (GetKey(olc::Key::CTRL).bHeld && GetKey(olc::Key::S).bPressed) {
@@ -110,15 +113,13 @@ namespace paint {
 			if (const int m = GetMouseWheel(); m) {
 				if (GetKey(olc::Key::SHIFT).bHeld) posx += m * delta * speed;
 				else if (GetKey(olc::Key::CTRL).bHeld) {
-					if (m > 0) ++scale;
-					else --scale;
+					if (m > 0) scale *= scale_speed;
+					else scale /= scale_speed;
 				}
 				else posy += m * delta * speed;
 			}
 
-			if (scale <= 0) scale = 1;
-			else if (scale > max_scale) scale = max_scale;
-			
+
 			if (GetMouse(2).bPressed) {
 				const int x = GetMouseX();
 				const int y = GetMouseY();
